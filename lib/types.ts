@@ -1,5 +1,5 @@
 /**
- * Netslice — Shared Type Definitions
+ * Cleft — Shared Type Definitions
  */
 
 export interface ColorLabel {
@@ -24,7 +24,7 @@ export interface CidrBlock {
   children: CidrBlock[];
 }
 
-export interface NetsliceConfig {
+export interface CleftConfig {
   id: string;
   name: string;
   rootCidr: string;

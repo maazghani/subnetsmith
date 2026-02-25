@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { nanoid } from "nanoid";
-import { NetsliceConfig, SubnetEntry, ColorLabel, DEFAULT_COLOR_LABELS } from "@/lib/types";
+import { CleftConfig, SubnetEntry, ColorLabel, DEFAULT_COLOR_LABELS } from "@/lib/types";
 import { normalizeCidr, getSubnetInfo, decodeConfig, parseCidr } from "@/lib/subnet";
 import { cn } from "@/lib/utils";
 import { Toolbar } from "@/components/Toolbar";
@@ -25,9 +25,9 @@ import {
   PanelLeft,
 } from "lucide-react";
 
-const STORAGE_KEY = "netslice-config";
+const STORAGE_KEY = "cleft-config";
 
-function makeDefault(): NetsliceConfig {
+function makeDefault(): CleftConfig {
   return {
     id: nanoid(),
     name: "My VPC Plan",
@@ -39,18 +39,18 @@ function makeDefault(): NetsliceConfig {
   };
 }
 
-function loadFromStorage(): NetsliceConfig | null {
+function loadFromStorage(): CleftConfig | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as NetsliceConfig;
+    return JSON.parse(raw) as CleftConfig;
   } catch {
     return null;
   }
 }
 
-function saveToStorage(config: NetsliceConfig) {
+function saveToStorage(config: CleftConfig) {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
 }
@@ -58,7 +58,7 @@ function saveToStorage(config: NetsliceConfig) {
 type SidebarTab = "carve" | "labels" | "list";
 
 export default function NetslicePage() {
-  const [config, setConfig] = useState<NetsliceConfig>(makeDefault);
+  const [config, setConfig] = useState<CleftConfig>(makeDefault);
   const [cidrInput, setCidrInput] = useState("");
   const [cidrError, setCidrError] = useState<string | null>(null);
   const [activeCidr, setActiveCidr] = useState<string | null>(null);
@@ -98,7 +98,7 @@ export default function NetslicePage() {
     saveToStorage(config);
   }, [config, hydrated]);
 
-  const updateConfig = useCallback((partial: Partial<NetsliceConfig>) => {
+  const updateConfig = useCallback((partial: Partial<CleftConfig>) => {
     setConfig((prev) => ({
       ...prev,
       ...partial,
