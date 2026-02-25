@@ -2,32 +2,36 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { nanoid } from "nanoid";
-import { SubnetSmithConfig, SubnetEntry, ColorLabel, DEFAULT_COLOR_LABELS } from "@/lib/types";
-import { normalizeCidr, getSubnetInfo, decodeConfig, encodeConfig } from "@/lib/subnet";
-import { cn } from "@/lib/utils";
+import {
+  SubnetSmithConfig,
+  SubnetEntry,
+  ColorLabel,
+  DEFAULT_COLOR_LABELS,
+} from "@/lib/types";
+import {
+  normalizeCidr,
+  getSubnetInfo,
+  decodeConfig,
+  encodeConfig,
+  cidrContains,
+} from "@/lib/subnet";
 import { Toolbar } from "@/components/Toolbar";
-import { CgnatBlockSelector } from "@/components/CgnatBlockSelector";
-import { AreaMap } from "@/components/AreaMap";
-import { SubnetEditModal } from "@/components/SubnetEditModal";
+import { CidrInput } from "@/components/CidrInput";
+import { SubnetCanvas } from "@/components/SubnetCanvas";
 import { ColorLabelManager } from "@/components/ColorLabelManager";
 import { SubnetList } from "@/components/SubnetList";
-import {
-  Tag,
-  List,
-  LayoutGrid,
-  Network,
-  Globe,
-  Settings2,
-} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Tag, List, LayoutGrid, X, ChevronLeft } from "lucide-react";
 
-const STORAGE_KEY = "subnetsmith-config-v2";
-const CGNAT_ROOT = "100.64.0.0/10";
+// ── Storage ───────────────────────────────────────────────────────────────────
+
+const STORAGE_KEY = "subnetsmith-v3";
 
 function makeDefault(): SubnetSmithConfig {
   return {
     id: nanoid(),
-    name: "CG-NAT Plan",
-    rootCidr: CGNAT_ROOT,
+    name: "My Network",
+    rootCidr: "",
     subnets: [],
     colorLabels: DEFAULT_COLOR_LABELS,
     createdAt: new Date().toISOString(),
@@ -35,248 +39,280 @@ function makeDefault(): SubnetSmithConfig {
   };
 }
 
-function loadFromStorage(): SubnetSmithConfig | null {
+function load(): SubnetSmithConfig | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as SubnetSmithConfig;
+    return raw ? (JSON.parse(raw) as SubnetSmithConfig) : null;
   } catch {
     return null;
   }
 }
 
-function saveToStorage(config: SubnetSmithConfig) {
+function save(config: SubnetSmithConfig) {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
 }
 
-// Filter subnets that belong to a given /16 block
-function subnetsForBlock(block: string, allSubnets: SubnetEntry[]): SubnetEntry[] {
-  const blockInfo = getSubnetInfo(block);
-  if (!blockInfo) return [];
-  return allSubnets.filter((s) => {
-    const si = getSubnetInfo(s.cidr);
-    if (!si) return false;
-    return si.networkInt >= blockInfo.networkInt && si.broadcastInt <= blockInfo.broadcastInt;
-  });
-}
+// ── Page ──────────────────────────────────────────────────────────────────────
 
-type SidePanel = "map" | "labels" | "list";
+type Tab = "canvas" | "labels" | "list";
 
-export default function SubnetSmithPage() {
+export default function Page() {
   const [config, setConfig] = useState<SubnetSmithConfig>(makeDefault);
-  const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
-  const [editingSubnet, setEditingSubnet] = useState<SubnetEntry | null>(null);
-  const [isNewSubnet, setIsNewSubnet] = useState(false);
-  const [pendingCidr, setPendingCidr] = useState<string | null>(null);
-  const [panel, setPanel] = useState<SidePanel>("map");
   const [hydrated, setHydrated] = useState(false);
+  // Breadcrumb stack: first element is rootCidr, last is current scope
+  const [breadcrumbs, setBreadcrumbs] = useState<string[]>([]);
+  const [tab, setTab] = useState<Tab>("canvas");
 
-  // Hydrate from URL or localStorage
+  // Hydrate
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const encoded = params.get("config");
     if (encoded) {
       const decoded = decodeConfig(encoded) as SubnetSmithConfig | null;
-      if (decoded) {
+      if (decoded?.rootCidr) {
         setConfig(decoded);
+        setBreadcrumbs([decoded.rootCidr]);
         setHydrated(true);
         return;
       }
     }
-    const stored = loadFromStorage();
-    if (stored) setConfig(stored);
+    const stored = load();
+    if (stored) {
+      setConfig(stored);
+      if (stored.rootCidr) setBreadcrumbs([stored.rootCidr]);
+    }
     setHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
-    saveToStorage(config);
+    if (hydrated) save(config);
   }, [config, hydrated]);
 
-  const updateConfig = useCallback((partial: Partial<SubnetSmithConfig>) => {
-    setConfig((prev) => ({ ...prev, ...partial, updatedAt: new Date().toISOString() }));
-  }, []);
+  const update = useCallback(
+    (partial: Partial<SubnetSmithConfig>) =>
+      setConfig((prev) => ({
+        ...prev,
+        ...partial,
+        updatedAt: new Date().toISOString(),
+      })),
+    [],
+  );
 
-  // ── Subnet actions ──────────────────────────────────────────────────────────
+  // ── Root CIDR set ──────────────────────────────────────────────────────────
 
-  const handleAddSubnet = (cidr: string) => {
-    const placeholder: SubnetEntry = {
-      id: nanoid(),
-      cidr,
-      name: "",
-      colorLabelId: config.colorLabels[0]?.id ?? null,
-      parentCidr: selectedBlock ?? config.rootCidr,
-    };
-    setPendingCidr(cidr);
-    setEditingSubnet(placeholder);
-    setIsNewSubnet(true);
+  const handleRootCidr = (cidr: string) => {
+    const norm = normalizeCidr(cidr);
+    if (!norm) return;
+    update({ rootCidr: norm, subnets: [] });
+    setBreadcrumbs([norm]);
   };
 
-  const handleSaveSubnet = (updated: Partial<SubnetEntry> & { id: string }) => {
-    if (isNewSubnet) {
-      const full: SubnetEntry = {
-        id: updated.id,
-        cidr: pendingCidr!,
-        name: updated.name ?? "Unnamed",
-        colorLabelId: updated.colorLabelId ?? null,
-        parentCidr: selectedBlock ?? config.rootCidr,
-        notes: updated.notes,
-      };
-      updateConfig({ subnets: [...config.subnets, full] });
-    } else {
-      updateConfig({
-        subnets: config.subnets.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)),
-      });
-    }
-    setEditingSubnet(null);
-    setPendingCidr(null);
-    setIsNewSubnet(false);
+  // ── Drill-down navigation ──────────────────────────────────────────────────
+
+  const activeCidr = breadcrumbs[breadcrumbs.length - 1] ?? config.rootCidr;
+
+  const drillDown = (cidr: string) => {
+    setBreadcrumbs((prev) => [...prev, cidr]);
+    setTab("canvas");
   };
 
-  const handleDeleteSubnet = (id: string) => {
-    const subnet = config.subnets.find((s) => s.id === id);
-    if (!subnet) return;
-    const si = getSubnetInfo(subnet.cidr);
-    const toDelete = config.subnets.filter((s) => {
-      if (s.id === id) return true;
-      const ci = getSubnetInfo(s.cidr);
-      return ci && si && ci.networkInt >= si.networkInt && ci.broadcastInt <= si.broadcastInt;
+  const navigateTo = (cidr: string) => {
+    setBreadcrumbs((prev) => {
+      const idx = prev.indexOf(cidr);
+      return idx >= 0 ? prev.slice(0, idx + 1) : prev;
     });
-    updateConfig({ subnets: config.subnets.filter((s) => !toDelete.find((d) => d.id === s.id)) });
   };
 
-  // ── Derived ─────────────────────────────────────────────────────────────────
+  const goBack = () => {
+    setBreadcrumbs((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
+  };
 
-  const blockSubnets = selectedBlock ? subnetsForBlock(selectedBlock, config.subnets) : [];
-  const totalAllocated = config.subnets.length;
+  // ── Subnet CRUD ────────────────────────────────────────────────────────────
+
+  const addSubnet = (subnet: SubnetEntry) => {
+    update({ subnets: [...config.subnets, subnet] });
+  };
+
+  const updateSubnet = (id: string, patch: Partial<SubnetEntry>) => {
+    update({
+      subnets: config.subnets.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    });
+  };
+
+  const deleteSubnet = (id: string) => {
+    const target = config.subnets.find((s) => s.id === id);
+    if (!target) return;
+    const targetInfo = getSubnetInfo(target.cidr);
+    // Cascade delete: remove the subnet and all subnets nested within it
+    update({
+      subnets: config.subnets.filter((s) => {
+        if (s.id === id) return false;
+        const si = getSubnetInfo(s.cidr);
+        if (!si || !targetInfo) return true;
+        return !(
+          si.networkInt >= targetInfo.networkInt &&
+          si.broadcastInt <= targetInfo.broadcastInt
+        );
+      }),
+    });
+    // If we were drilled into the deleted subnet, pop back
+    setBreadcrumbs((prev) => {
+      const idx = prev.indexOf(target.cidr);
+      return idx >= 0 ? prev.slice(0, idx) : prev;
+    });
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  const hasRoot = !!config.rootCidr;
+  const isDeep = breadcrumbs.length > 1;
+
+  // Subnets that are visible in the list tab (within active scope)
+  const scopedSubnets = config.subnets.filter((s) => {
+    if (!activeCidr) return false;
+    return cidrContains(activeCidr, s.cidr);
+  });
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
-      {/* Top toolbar */}
+      {/* Toolbar */}
       <Toolbar
         config={config}
-        onNameChange={(name) => updateConfig({ name })}
+        onNameChange={(name) => update({ name })}
         onImport={(imported) => {
           setConfig({ ...imported, id: nanoid() });
-          setSelectedBlock(null);
+          setBreadcrumbs(imported.rootCidr ? [imported.rootCidr] : []);
         }}
         onClear={() => {
-          updateConfig({ subnets: [] });
-          setSelectedBlock(null);
+          update({ subnets: [] });
+          setBreadcrumbs(config.rootCidr ? [config.rootCidr] : []);
         }}
       />
 
-      {/* CG-NAT block selector — always visible */}
-      <CgnatBlockSelector
-        selectedBlock={selectedBlock}
-        subnets={config.subnets}
-        colorLabels={config.colorLabels}
-        onSelectBlock={(block) => {
-          setSelectedBlock((prev) => (prev === block ? null : block));
-          setPanel("map");
-        }}
-      />
-
-      {/* Main body — only shown when a block is selected */}
-      {selectedBlock ? (
+      {!hasRoot ? (
+        /* ── No root set: show CIDR entry ───────────────────────────────────── */
+        <CidrInput onConfirm={handleRootCidr} />
+      ) : (
+        /* ── Main workspace ─────────────────────────────────────────────────── */
         <div className="flex flex-1 overflow-hidden">
-          {/* Left nav tabs */}
-          <nav className="w-10 shrink-0 flex flex-col items-center border-r border-border bg-card pt-3 gap-1">
+          {/* Slim left nav */}
+          <nav className="w-11 shrink-0 flex flex-col items-center border-r border-border bg-card pt-3 gap-1">
             {(
               [
-                { id: "map" as SidePanel, icon: LayoutGrid, label: "Area Map" },
-                { id: "labels" as SidePanel, icon: Tag, label: "Labels" },
-                { id: "list" as SidePanel, icon: List, label: "All subnets" },
+                { id: "canvas" as Tab, icon: LayoutGrid, label: "Subnet Map" },
+                { id: "labels" as Tab, icon: Tag,         label: "Labels"     },
+                { id: "list"   as Tab, icon: List,         label: "All Subnets"},
               ] as const
-            ).map((tab) => (
+            ).map((t) => (
               <button
-                key={tab.id}
-                title={tab.label}
-                onClick={() => setPanel(tab.id)}
+                key={t.id}
+                title={t.label}
+                onClick={() => setTab(t.id)}
                 className={cn(
                   "w-7 h-7 rounded-md flex items-center justify-center transition-colors",
-                  panel === tab.id
+                  tab === t.id
                     ? "bg-primary/20 text-primary"
-                    : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+                    : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
                 )}
               >
-                <tab.icon size={14} />
+                <t.icon size={14} />
               </button>
             ))}
+
+            {/* Change root CIDR button */}
+            <div className="flex-1" />
+            <button
+              title="Change root CIDR"
+              onClick={() => {
+                update({ rootCidr: "", subnets: [] });
+                setBreadcrumbs([]);
+              }}
+              className="w-7 h-7 mb-3 rounded-md flex items-center justify-center text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors"
+            >
+              <X size={14} />
+            </button>
           </nav>
 
-          {/* Content panel */}
+          {/* Main content */}
           <div className="flex flex-1 overflow-hidden flex-col">
-            {panel === "map" && (
-              <AreaMap
-                rootCidr={selectedBlock}
-                subnets={blockSubnets}
-                colorLabels={config.colorLabels}
-                onAddSubnet={handleAddSubnet}
-                onEditSubnet={(subnet) => { setEditingSubnet(subnet); setIsNewSubnet(false); }}
-                onDeleteSubnet={handleDeleteSubnet}
-              />
+            {tab === "canvas" && (
+              <>
+                {/* Back button when drilled in */}
+                {isDeep && (
+                  <div className="flex items-center gap-2 px-5 pt-3 pb-0 shrink-0">
+                    <button
+                      onClick={goBack}
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group"
+                    >
+                      <ChevronLeft
+                        size={13}
+                        className="group-hover:-translate-x-0.5 transition-transform"
+                      />
+                      Back to{" "}
+                      <span className="font-mono">
+                        {breadcrumbs[breadcrumbs.length - 2]}
+                      </span>
+                    </button>
+                  </div>
+                )}
+
+                <SubnetCanvas
+                  rootCidr={activeCidr}
+                  allSubnets={config.subnets}
+                  colorLabels={config.colorLabels}
+                  breadcrumbs={breadcrumbs}
+                  onAddSubnet={addSubnet}
+                  onUpdateSubnet={updateSubnet}
+                  onDeleteSubnet={deleteSubnet}
+                  onDrillDown={drillDown}
+                />
+              </>
             )}
-            {panel === "labels" && (
-              <div className="p-5 max-w-lg">
-                <h2 className="text-xs font-semibold text-foreground uppercase tracking-wide mb-4">Color Labels</h2>
+
+            {tab === "labels" && (
+              <div className="p-6 max-w-md">
+                <h2 className="text-xs font-semibold text-foreground uppercase tracking-wide mb-1">
+                  Color Labels
+                </h2>
+                <p className="text-xs text-muted-foreground mb-5">
+                  Assign labels to subnets to group them by purpose or environment.
+                </p>
                 <ColorLabelManager
                   colorLabels={config.colorLabels}
-                  onChange={(labels) => updateConfig({ colorLabels: labels })}
+                  onChange={(labels) => update({ colorLabels: labels })}
                 />
               </div>
             )}
-            {panel === "list" && (
-              <div className="p-5 max-w-2xl">
-                <h2 className="text-xs font-semibold text-foreground uppercase tracking-wide mb-4">
-                  All Subnets in {selectedBlock}
+
+            {tab === "list" && (
+              <div className="p-6 max-w-2xl">
+                <h2 className="text-xs font-semibold text-foreground uppercase tracking-wide mb-1">
+                  All Subnets
                 </h2>
+                <p className="text-xs text-muted-foreground mb-5">
+                  {scopedSubnets.length} subnet{scopedSubnets.length !== 1 ? "s" : ""} within{" "}
+                  <span className="font-mono text-foreground">{activeCidr}</span>
+                </p>
                 <SubnetList
-                  subnets={blockSubnets}
+                  subnets={scopedSubnets}
                   colorLabels={config.colorLabels}
-                  activeCidr={selectedBlock}
-                  onEdit={(subnet) => { setEditingSubnet(subnet); setIsNewSubnet(false); }}
-                  onDelete={handleDeleteSubnet}
-                  onSelect={() => {}}
+                  activeCidr={activeCidr}
+                  onEdit={(subnet) => {
+                    setTab("canvas");
+                  }}
+                  onDelete={deleteSubnet}
+                  onSelect={(cidr) => {
+                    drillDown(cidr);
+                    setTab("canvas");
+                  }}
                 />
               </div>
             )}
           </div>
-        </div>
-      ) : (
-        /* No block selected — instruction overlay */
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-8">
-          <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-            <Network size={22} className="text-primary" />
-          </div>
-          <div className="space-y-1.5 max-w-sm">
-            <h2 className="text-base font-semibold text-foreground">Select a /16 block above</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Click any cell in the CG-NAT grid to open its address space and start planning subnets within it.
-            </p>
-          </div>
-          {totalAllocated > 0 && (
-            <div className="mt-2 px-3 py-1.5 rounded-full border border-border bg-secondary/30 text-xs text-muted-foreground">
-              {totalAllocated} subnet{totalAllocated !== 1 ? "s" : ""} allocated across all blocks
-            </div>
-          )}
         </div>
       )}
-
-      {/* Edit / create modal */}
-      <SubnetEditModal
-        subnet={editingSubnet}
-        colorLabels={config.colorLabels}
-        onSave={handleSaveSubnet}
-        onClose={() => {
-          setEditingSubnet(null);
-          setPendingCidr(null);
-          setIsNewSubnet(false);
-        }}
-        isNew={isNewSubnet}
-      />
     </div>
   );
 }
