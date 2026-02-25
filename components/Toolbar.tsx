@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { NetsliceConfig } from "@/lib/types";
+import { SubnetSmithConfig } from "@/lib/types";
 import { encodeConfig, decodeConfig } from "@/lib/subnet";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -25,9 +25,9 @@ import {
 } from "lucide-react";
 
 interface ToolbarProps {
-  config: NetsliceConfig;
+  config: SubnetSmithConfig;
   onNameChange: (name: string) => void;
-  onImport: (config: NetsliceConfig) => void;
+  onImport: (config: SubnetSmithConfig) => void;
   onClear: () => void;
 }
 
@@ -53,7 +53,7 @@ export function Toolbar({ config, onNameChange, onImport, onClear }: ToolbarProp
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${config.name.replace(/\s+/g, "-").toLowerCase()}-netslice.json`;
+    a.download = `${config.name.replace(/\s+/g, "-").toLowerCase()}-subnetsmith.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -68,7 +68,7 @@ export function Toolbar({ config, onNameChange, onImport, onClear }: ToolbarProp
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const parsed = JSON.parse(ev.target?.result as string) as NetsliceConfig;
+        const parsed = JSON.parse(ev.target?.result as string) as SubnetSmithConfig;
         if (parsed.rootCidr && parsed.subnets) {
           onImport(parsed);
         }
@@ -98,7 +98,7 @@ export function Toolbar({ config, onNameChange, onImport, onClear }: ToolbarProp
           <Network size={13} className="text-primary" />
         </div>
         <span className="text-sm font-bold tracking-tight text-foreground">
-          net<span className="text-primary">slice</span>
+          subnet<span className="text-primary">smith</span>
         </span>
       </div>
 

@@ -7,7 +7,7 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Netslice — Visual Subnet Planner',
+  title: 'SubnetSmith — Visual Subnet Planner',
   description: 'Plan and visualize IP address spaces and VPC subnets with an interactive CIDR builder.',
   generator: 'v0.app',
   icons: {

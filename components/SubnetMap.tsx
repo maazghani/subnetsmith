@@ -4,7 +4,7 @@ import { getSubnetInfo, splitCidr, formatHostCount, subnetSizeLabel } from "@/li
 import { SubnetEntry, ColorLabel } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SubnetBlock } from "./SubnetBlock";
-import { Network, AlertCircle } from "lucide-react";
+import { Network, MousePointerClick, Ruler, AlertCircle } from "lucide-react";
 
 interface SubnetMapProps {
   rootCidr: string;
@@ -44,7 +44,6 @@ export function SubnetMap({
     );
   }
 
-  // Stats
   const allocatedCount = allSubnets.length;
   const totalSpace = rootInfo.totalHosts;
   const allocatedSpace = allSubnets.reduce((sum, s) => {
@@ -53,12 +52,9 @@ export function SubnetMap({
   }, 0);
   const utilizationPct = totalSpace > 0 ? Math.round((allocatedSpace / totalSpace) * 100) : 0;
 
-  // Top-level unallocated blocks: if we have a selectedChildPrefix and activeCidr === rootCidr,
-  // show all root-level split slots
   const showRootSlots = activeCidr === rootCidr && selectedChildPrefix !== null;
   const rootSlots = showRootSlots ? splitCidr(rootCidr, selectedChildPrefix) : [];
 
-  // Top-level subnets (no parent among existing subnets)
   const topLevelSubnets = allSubnets.filter((s) => {
     const si = getSubnetInfo(s.cidr);
     if (!si) return false;
@@ -79,22 +75,23 @@ export function SubnetMap({
   return (
     <div className="flex flex-col h-full">
       {/* Stats bar */}
-      <div className="flex items-center gap-4 px-4 py-2 border-b border-border bg-card/50 shrink-0 flex-wrap">
+      <div className="flex items-center gap-4 px-5 py-2.5 border-b border-border bg-card/60 shrink-0 flex-wrap">
         <div className="flex items-center gap-2">
-          <Network size={14} className="text-primary" />
-          <span className="text-xs font-mono text-foreground font-semibold">{rootCidr}</span>
+          <Network size={14} className="text-primary shrink-0" />
+          <span className="text-sm font-mono font-semibold text-foreground">{rootCidr}</span>
         </div>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <span>{formatHostCount(rootInfo.usableHosts)}</span>
-          <span>usable hosts</span>
-        </div>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <span>/{rootInfo.prefix}</span>
-          <span className="text-border">|</span>
-          <span>{rootInfo.networkAddress} — {rootInfo.broadcastAddress}</span>
-        </div>
+        <div className="h-3 w-px bg-border" />
+        <span className="text-xs text-muted-foreground">
+          {formatHostCount(rootInfo.usableHosts)} usable hosts
+        </span>
+        <div className="h-3 w-px bg-border hidden sm:block" />
+        <span className="text-xs font-mono text-muted-foreground hidden sm:block">
+          {rootInfo.networkAddress} – {rootInfo.broadcastAddress}
+        </span>
         <div className="ml-auto flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">{allocatedCount} subnet{allocatedCount !== 1 ? "s" : ""}</span>
+          <span className="text-xs text-muted-foreground">
+            {allocatedCount} subnet{allocatedCount !== 1 ? "s" : ""}
+          </span>
           <div className="flex items-center gap-2">
             <div className="w-24 h-1.5 rounded-full bg-border overflow-hidden">
               <div
@@ -102,50 +99,65 @@ export function SubnetMap({
                 style={{ width: `${Math.min(utilizationPct, 100)}%` }}
               />
             </div>
-            <span className="text-xs text-muted-foreground">{utilizationPct}%</span>
+            <span className="text-xs tabular-nums text-muted-foreground">{utilizationPct}%</span>
           </div>
         </div>
       </div>
 
       {/* Hover preview bar */}
-      {hoveredSlot && (
-        <div className="flex items-center gap-3 px-4 py-1.5 bg-primary/10 border-b border-primary/30 shrink-0">
-          <span className="text-xs font-mono text-primary font-semibold">{hoveredSlot}</span>
-          {(() => {
-            const si = getSubnetInfo(hoveredSlot);
-            if (!si) return null;
-            return (
+      {hoveredSlot && (() => {
+        const si = getSubnetInfo(hoveredSlot);
+        return (
+          <div className="flex items-center gap-3 px-5 py-2 bg-primary/10 border-b border-primary/20 shrink-0">
+            <span className="text-xs font-mono font-semibold text-primary">{hoveredSlot}</span>
+            {si && (
               <>
-                <span className="text-xs text-muted-foreground">{si.networkAddress} — {si.broadcastAddress}</span>
+                <span className="text-xs text-muted-foreground hidden sm:block">{si.networkAddress} – {si.broadcastAddress}</span>
                 <span className="text-xs text-muted-foreground">{formatHostCount(si.usableHosts)} usable hosts</span>
               </>
-            );
-          })()}
+            )}
+            <span className="ml-auto text-xs text-primary font-medium">Click to create subnet</span>
+          </div>
+        );
+      })()}
+
+      {/* Instruction banner — shown when a size is selected */}
+      {selectedChildPrefix && !hoveredSlot && (
+        <div className="flex items-center gap-2 px-5 py-2 bg-primary/5 border-b border-primary/15 shrink-0">
+          <MousePointerClick size={13} className="text-primary shrink-0" />
+          <span className="text-xs text-primary">
+            Click any slot below to create a{" "}
+            <span className="font-mono font-semibold">/{selectedChildPrefix}</span>{" "}
+            subnet ({subnetSizeLabel(selectedChildPrefix)} hosts)
+          </span>
         </div>
       )}
 
-      {/* Main map area */}
-      <div className="flex-1 overflow-auto p-4">
+      {/* Main map */}
+      <div className="flex-1 overflow-auto p-5">
         {allSubnets.length === 0 && !showRootSlots ? (
-          <EmptyState rootCidr={rootCidr} onBlockClick={onBlockClick} />
+          <EmptyState
+            rootCidr={rootCidr}
+            activeCidr={activeCidr}
+            selectedChildPrefix={selectedChildPrefix}
+            onBlockClick={onBlockClick}
+          />
         ) : showRootSlots ? (
-          /* Root-level slot grid */
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs text-muted-foreground">
-                Showing {rootSlots.length} × /{selectedChildPrefix} slots ({subnetSizeLabel(selectedChildPrefix!)} hosts each)
-              </span>
-              <span className="text-xs text-muted-foreground">— click a slot to allocate</span>
-            </div>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              {rootSlots.length} × <span className="font-mono text-foreground">/{selectedChildPrefix}</span> slots in{" "}
+              <span className="font-mono text-foreground">{rootCidr}</span>
+            </p>
             <div
-              className={cn(
-                "grid gap-1",
-                rootSlots.length <= 4 ? "grid-cols-1" :
-                rootSlots.length <= 8 ? "grid-cols-2" :
-                rootSlots.length <= 16 ? "grid-cols-4" :
-                rootSlots.length <= 64 ? "grid-cols-8" :
-                "grid-cols-16",
-              )}
+              className="grid gap-2"
+              style={{
+                gridTemplateColumns: `repeat(${
+                  rootSlots.length <= 2 ? 1 :
+                  rootSlots.length <= 4 ? 2 :
+                  rootSlots.length <= 8 ? 2 :
+                  rootSlots.length <= 16 ? 4 : 8
+                }, minmax(0, 1fr))`,
+              }}
             >
               {rootSlots.map((slot) => (
                 <SubnetBlock
@@ -167,8 +179,7 @@ export function SubnetMap({
             </div>
           </div>
         ) : (
-          /* Existing subnets list */
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {topLevelSubnets.map((subnet) => (
               <SubnetBlock
                 key={subnet.cidr}
@@ -186,13 +197,13 @@ export function SubnetMap({
                 activeCidr={activeCidr}
               />
             ))}
-            {/* Add more button */}
+            {/* Add more prompt */}
             <button
-              className="w-full rounded border border-dashed border-white/15 py-3 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors flex items-center justify-center gap-2"
+              className="w-full rounded-lg border border-dashed border-border/60 py-3.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors flex items-center justify-center gap-2 mt-1"
               onClick={() => onBlockClick(rootCidr)}
             >
-              <Network size={12} />
-              Click to carve more subnets from {rootCidr}
+              <Network size={13} />
+              Carve more subnets from {rootCidr}
             </button>
           </div>
         )}
@@ -201,27 +212,80 @@ export function SubnetMap({
   );
 }
 
-function EmptyState({ rootCidr, onBlockClick }: { rootCidr: string; onBlockClick: (c: string) => void }) {
+function EmptyState({
+  rootCidr,
+  activeCidr,
+  selectedChildPrefix,
+  onBlockClick,
+}: {
+  rootCidr: string;
+  activeCidr: string | null;
+  selectedChildPrefix: number | null;
+  onBlockClick: (c: string) => void;
+}) {
   const rootInfo = getSubnetInfo(rootCidr);
+
+  // Guide the user through the remaining steps
+  const steps = [
+    {
+      done: true,
+      icon: Network,
+      text: <>Range set: <span className="font-mono text-foreground">{rootCidr}</span></>,
+    },
+    {
+      done: !!activeCidr,
+      icon: MousePointerClick,
+      text: activeCidr
+        ? <>Selected: <span className="font-mono text-foreground">{activeCidr}</span></>
+        : <><span className="text-foreground font-medium">Click the block below</span> to select it</>,
+    },
+    {
+      done: !!selectedChildPrefix,
+      icon: Ruler,
+      text: selectedChildPrefix
+        ? <>Size chosen: <span className="font-mono text-foreground">/{selectedChildPrefix}</span></>
+        : <><span className="text-foreground font-medium">Pick a subnet size</span> in the left panel</>,
+    },
+  ];
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[320px] gap-4">
-      <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-        <Network size={28} className="text-primary" />
+    <div className="flex flex-col items-center gap-6 pt-8">
+      {/* Step checklist */}
+      <div className="w-full max-w-sm space-y-2">
+        {steps.map((s, i) => (
+          <div key={i} className={cn("flex items-center gap-3 px-3 py-2 rounded-lg", s.done ? "opacity-50" : "bg-secondary/30 border border-border")}>
+            <div className={cn("w-5 h-5 rounded-full flex items-center justify-center shrink-0", s.done ? "bg-primary/20" : "bg-primary/10 border border-primary/30")}>
+              <s.icon size={11} className={s.done ? "text-primary" : "text-primary"} />
+            </div>
+            <span className="text-xs text-muted-foreground">{s.text}</span>
+          </div>
+        ))}
       </div>
-      <div className="text-center space-y-1">
-        <p className="text-sm font-semibold text-foreground">No subnets carved yet</p>
-        <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
-          Select a subnet size from the panel on the left, then click a slot to allocate it within{" "}
-          <span className="font-mono text-foreground">{rootCidr}</span>{" "}
-          {rootInfo && <>({formatHostCount(rootInfo.usableHosts)} usable hosts)</>}
-        </p>
+
+      {/* Clickable root block */}
+      <div className="w-full max-w-sm">
+        <button
+          className={cn(
+            "w-full rounded-xl border-2 border-dashed px-5 py-6 text-left transition-all duration-150 group",
+            activeCidr
+              ? "border-primary/60 bg-primary/8"
+              : "border-border hover:border-primary/50 hover:bg-primary/5",
+          )}
+          onClick={() => onBlockClick(rootCidr)}
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <Network size={18} className={cn("shrink-0", activeCidr ? "text-primary" : "text-muted-foreground group-hover:text-primary")} />
+            <span className={cn("text-base font-mono font-semibold", activeCidr ? "text-primary" : "text-foreground")}>
+              {rootCidr}
+            </span>
+            {activeCidr && <span className="ml-auto text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium">Selected</span>}
+          </div>
+          <p className="text-xs text-muted-foreground ml-7">
+            {rootInfo ? formatHostCount(rootInfo.usableHosts) : ""} usable hosts
+            {!activeCidr && " — click to select"}
+          </p>
+        </button>
       </div>
-      <button
-        className="text-xs text-primary hover:underline"
-        onClick={() => onBlockClick(rootCidr)}
-      >
-        Select {rootCidr} to start carving
-      </button>
     </div>
   );
 }

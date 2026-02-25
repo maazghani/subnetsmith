@@ -1,5 +1,5 @@
 /**
- * Cleft — Shared Type Definitions
+ * SubnetSmith — Shared Type Definitions
  */
 
 export interface ColorLabel {
@@ -24,7 +24,7 @@ export interface CidrBlock {
   children: CidrBlock[];
 }
 
-export interface CleftConfig {
+export interface SubnetSmithConfig {
   id: string;
   name: string;
   rootCidr: string;
@@ -33,6 +33,11 @@ export interface CleftConfig {
   createdAt: string;
   updatedAt: string;
 }
+
+/** @deprecated use SubnetSmithConfig */
+export type CleftConfig = SubnetSmithConfig;
+/** @deprecated use SubnetSmithConfig */
+export type NetsliceConfig = SubnetSmithConfig;
 
 export const DEFAULT_COLOR_LABELS: ColorLabel[] = [
   { id: "pub", label: "Public", color: "#22d3ee" },
