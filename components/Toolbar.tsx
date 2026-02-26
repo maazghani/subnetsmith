@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { useTheme } from "next-themes";
 import { SubnetSmithConfig } from "@/lib/types";
 import { encodeConfig, decodeConfig } from "@/lib/subnet";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,8 @@ import {
   Check,
   Copy,
   Network,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 interface ToolbarProps {
@@ -37,6 +40,7 @@ export function Toolbar({ config, onNameChange, onImport, onClear }: ToolbarProp
   const [shareCopied, setShareCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { theme, setTheme } = useTheme();
 
   const handleNameBlur = () => {
     setIsEditingName(false);
@@ -168,6 +172,17 @@ export function Toolbar({ config, onNameChange, onImport, onClear }: ToolbarProp
         >
           <Upload size={12} />
           <span className="hidden sm:inline">Import</span>
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+          <span className="sr-only">Toggle theme</span>
         </Button>
 
         <DropdownMenu>

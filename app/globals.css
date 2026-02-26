@@ -4,6 +4,47 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* SubnetSmith - light theme */
+  --background: oklch(0.97 0.003 240);
+  --foreground: oklch(0.15 0.010 240);
+  --card: oklch(1.00 0.002 240);
+  --card-foreground: oklch(0.15 0.010 240);
+  --popover: oklch(1.00 0.002 240);
+  --popover-foreground: oklch(0.15 0.010 240);
+  --primary: oklch(0.55 0.17 198);
+  --primary-foreground: oklch(0.99 0.002 240);
+  --secondary: oklch(0.92 0.005 240);
+  --secondary-foreground: oklch(0.25 0.010 240);
+  --muted: oklch(0.93 0.005 240);
+  --muted-foreground: oklch(0.48 0.010 240);
+  --accent: oklch(0.55 0.17 198);
+  --accent-foreground: oklch(0.99 0.002 240);
+  --destructive: oklch(0.54 0.22 25);
+  --destructive-foreground: oklch(0.99 0.002 240);
+  --border: oklch(0.86 0.007 240);
+  --input: oklch(0.90 0.005 240);
+  --ring: oklch(0.55 0.17 198);
+  --radius: 0.5rem;
+  /* Subnet palette tokens */
+  --subnet-cyan: oklch(0.55 0.15 195);
+  --subnet-emerald: oklch(0.52 0.17 160);
+  --subnet-amber: oklch(0.58 0.18 75);
+  --subnet-rose: oklch(0.52 0.20 15);
+  --subnet-violet: oklch(0.52 0.18 280);
+  --subnet-sky: oklch(0.52 0.17 230);
+  --subnet-orange: oklch(0.55 0.19 45);
+  --subnet-lime: oklch(0.52 0.18 135);
+  --sidebar: oklch(0.94 0.005 240);
+  --sidebar-foreground: oklch(0.15 0.010 240);
+  --sidebar-primary: oklch(0.55 0.17 198);
+  --sidebar-primary-foreground: oklch(0.99 0.002 240);
+  --sidebar-accent: oklch(0.89 0.006 240);
+  --sidebar-accent-foreground: oklch(0.20 0.010 240);
+  --sidebar-border: oklch(0.83 0.007 240);
+  --sidebar-ring: oklch(0.55 0.17 198);
+}
+
+.dark {
   /* SubnetSmith - dark engineering tool theme */
   --background: oklch(0.09 0.004 240);
   --foreground: oklch(0.96 0.004 240);
@@ -24,7 +65,6 @@
   --border: oklch(0.20 0.009 240);
   --input: oklch(0.17 0.007 240);
   --ring: oklch(0.66 0.17 198);
-  --radius: 0.5rem;
   /* Subnet palette tokens */
   --subnet-cyan: oklch(0.75 0.15 195);
   --subnet-emerald: oklch(0.72 0.17 160);
@@ -43,8 +83,6 @@
   --sidebar-border: oklch(0.22 0.01 240);
   --sidebar-ring: oklch(0.65 0.18 200);
 }
-
-/* No separate .dark block — app forces dark mode via html class */
 
 @theme inline {
   --font-sans: 'Geist', 'Geist Fallback';
